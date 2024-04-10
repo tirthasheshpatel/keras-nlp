@@ -143,7 +143,7 @@ class CausalLM(Task):
         """Run generation on a single batch of input."""
         raise NotImplementedError
 
-    def make_generate_function(self):
+    def make_generate_function(self, callback=None):
         """Create or return the compiled generation function."""
         if self.generate_function is not None:
             return self.generate_function
@@ -157,7 +157,10 @@ class CausalLM(Task):
                 stop_token_ids=None,
             ):
                 with torch.no_grad():
-                    return self.generate_step(inputs, stop_token_ids)
+                    outputs = self.generate_step(inputs, stop_token_ids)
+                if callback is not None:
+                    callback()
+                return outputs
 
             self.generate_function = wrapped_generate_function
         elif config.backend() == "tensorflow" and not self.run_eagerly:
@@ -296,10 +299,7 @@ class CausalLM(Task):
         return normalize([x for x in outputs])
 
     def generate(
-        self,
-        inputs,
-        max_length=None,
-        stop_token_ids="auto",
+        self, inputs, max_length=None, stop_token_ids="auto", callback=None
     ):
         """Generate text given prompt `inputs`.
 
@@ -340,7 +340,7 @@ class CausalLM(Task):
         # 1. Optionally preprocessing strings to dense integer tensors.
         # 2. Generate new tokens via a compiled function on dense tensors.
         # 3. Optionally postprocess dense integer tensors back to string.
-        generate_function = self.make_generate_function()
+        generate_function = self.make_generate_function(callback=callback)
 
         if self.preprocessor is None and stop_token_ids == "auto":
             raise ValueError(
